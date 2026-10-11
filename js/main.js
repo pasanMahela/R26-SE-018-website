@@ -136,14 +136,38 @@
   }
   var form = document.getElementById("contact-form");
   if (form) {
+    var status = form.querySelector(".form-status");
+    var button = form.querySelector("button[type=submit]");
+    function show(msg, ok, html) {
+      status.className = "form-status full " + (ok ? "ok" : "err");
+      if (html) { status.innerHTML = msg; } else { status.textContent = msg; }
+    }
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
       var d = new FormData(form);
-      var to = form.getAttribute("data-to");
-      var subject = "R26-SE-018 | " + (d.get("topic") || "General enquiry");
-      var body = "Name: " + d.get("name") + "\nEmail: " + d.get("email") + "\n\n" + d.get("message");
-      window.location.href = "mailto:" + to + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
-      toast("Opening your email app");
+      if (d.get("_honey")) { return; }                       /* a bot filled the hidden field */
+      var topic = d.get("topic") || "General enquiry";
+      var payload = { name: d.get("name"), email: d.get("email"), topic: topic, message: d.get("message"),
+                      _subject: "R26-SE-018 website | " + topic, _template: "table", _captcha: "false" };
+      var mailto = "mailto:" + form.getAttribute("data-to") + "?subject=" + encodeURIComponent(payload._subject) +
+                   "&body=" + encodeURIComponent("Name: " + payload.name + "\nEmail: " + payload.email + "\n\n" + payload.message);
+      button.disabled = true; button.querySelector("span").textContent = "Sending...";
+      fetch(form.getAttribute("data-endpoint"), {
+        method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(payload)
+      }).then(function (r) { return r.json(); }).then(function (res) {
+        if (String(res.success) === "true") {
+          show("Thank you, your message has been sent. We will reply to " + payload.email + ".", true);
+          form.reset();
+        } else {
+          show("The message could not be sent from this page (" + (res.message || "unknown error") +
+               "). <a href=\"" + mailto + "\">Send it with your email app instead</a>.", false, true);
+        }
+      }).catch(function () {
+        show("No connection to the message service. <a href=\"" + mailto + "\">Send it with your email app instead</a>.", false, true);
+      }).then(function () {
+        button.disabled = false; button.querySelector("span").textContent = "Send Message";
+      });
     });
   }
 })();
